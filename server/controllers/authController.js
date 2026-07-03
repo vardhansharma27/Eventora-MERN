@@ -30,12 +30,12 @@ exports.register = async (req, res) => {
         const otp = generateOTP();
         await OTP.create({ email, otp, action: 'account_verification' });
 
-        // Respond immediately — don't block on slow/failed SMTP (common on cloud hosts)
-        sendOTPEmail(email, otp, 'account_verification');
+        const emailSent = await sendOTPEmail(email, otp, 'account_verification');
 
         res.status(201).json({
-            message: 'OTP sent to email. Please verify.',
-            email: user.email
+            message: emailSent ? 'OTP sent to email. Please verify.' : 'Account created. Email delivery failed — try resending OTP or contact support.',
+            email: user.email,
+            emailSent
         });
     } catch (error) {
         res.status(500).json({ message: 'Server Error', error: error.message });
@@ -56,12 +56,13 @@ exports.login = async (req, res) => {
             await OTP.findOneAndDelete({ email: user.email, action: 'account_verification' });
             await OTP.create({ email: user.email, otp, action: 'account_verification' });
 
-            sendOTPEmail(user.email, otp, 'account_verification');
+            const emailSent = await sendOTPEmail(user.email, otp, 'account_verification');
 
             return res.status(403).json({
                 message: 'Account not verified',
                 needsVerification: true,
-                email: user.email
+                email: user.email,
+                emailSent
             });
         }
 
@@ -83,11 +84,11 @@ exports.verifyOTP = async (req, res) => {
         const validOTP = await OTP.findOne({ email, otp, action: 'account_verification' });
 
         if (!validOTP) {
-            return res.status(400).json({ message: 'Invalid or expired OTP' });
+            return res.status(400).json({ message: 'Invalid or expired OTP. Request a new code by signing in again.' });
         }
 
         const user = await User.findOneAndUpdate({ email }, { isVerified: true }, { new: true });
-        await OTP.deleteOne({ _id: validOTP._id }); // Delete OTP after usage
+        await OTP.deleteOne({ _id: validOTP._id });
 
         res.json({
             _id: user.id,
@@ -98,5 +99,31 @@ exports.verifyOTP = async (req, res) => {
         });
     } catch (error) {
         res.status(500).json({ message: 'Server Error' });
+    }
+};
+
+exports.resendOTP = async (req, res) => {
+    try {
+        const { email } = req.body;
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: 'No account found for this email' });
+        }
+        if (user.isVerified) {
+            return res.status(400).json({ message: 'Account is already verified' });
+        }
+
+        const otp = generateOTP();
+        await OTP.findOneAndDelete({ email, action: 'account_verification' });
+        await OTP.create({ email, otp, action: 'account_verification' });
+
+        const emailSent = await sendOTPEmail(email, otp, 'account_verification');
+
+        res.json({
+            message: emailSent ? 'A new OTP has been sent to your email.' : 'Could not send email. Check server email configuration.',
+            emailSent
+        });
+    } catch (error) {
+        res.status(500).json({ message: 'Server Error', error: error.message });
     }
 };

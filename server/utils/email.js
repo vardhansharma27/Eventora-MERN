@@ -3,51 +3,72 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
-const isEmailConfigured = () =>
-    Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+const getEmailProvider = () => {
+    if (process.env.BREVO_SMTP_KEY && process.env.BREVO_SMTP_USER) return 'brevo';
+    if (process.env.EMAIL_USER && process.env.EMAIL_PASS) return 'gmail';
+    return null;
+};
 
-const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
-    port: 465,
-    secure: true,
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000
-});
+const isEmailConfigured = () => Boolean(getEmailProvider());
+
+const createTransporter = () => {
+    const provider = getEmailProvider();
+    if (provider === 'brevo') {
+        return {
+            provider,
+            from: `"Eventora" <${process.env.BREVO_SMTP_USER}>`,
+            transport: nodemailer.createTransport({
+                host: 'smtp-relay.brevo.com',
+                port: 587,
+                secure: false,
+                auth: {
+                    user: process.env.BREVO_SMTP_USER,
+                    pass: process.env.BREVO_SMTP_KEY
+                },
+                connectionTimeout: 10000,
+                greetingTimeout: 10000,
+                socketTimeout: 15000
+            })
+        };
+    }
+    if (provider === 'gmail') {
+        return {
+            provider,
+            from: `"Eventora" <${process.env.EMAIL_USER}>`,
+            transport: nodemailer.createTransport({
+                host: 'smtp.gmail.com',
+                port: 465,
+                secure: true,
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS
+                },
+                connectionTimeout: 10000,
+                greetingTimeout: 10000,
+                socketTimeout: 15000
+            })
+        };
+    }
+    return null;
+};
 
 const sendMail = async (mailOptions) => {
-    if (!isEmailConfigured()) {
-        console.error('Email not configured: EMAIL_USER and EMAIL_PASS are required');
+    const config = createTransporter();
+    if (!config) {
+        console.error('Email not configured. Set BREVO_SMTP_* (production) or EMAIL_USER/PASS (local Gmail).');
         return false;
     }
     try {
-        await transporter.sendMail({
-            from: `"Eventora" <${process.env.EMAIL_USER}>`,
+        await config.transport.sendMail({
+            from: config.from,
             ...mailOptions
         });
+        console.log(`Email sent via ${config.provider} to ${mailOptions.to}`);
         return true;
     } catch (error) {
-        console.error('Email send failed:', error.message);
+        console.error(`Email send failed (${config.provider}):`, error.message);
         return false;
     }
-};
-
-const sendBookingEmail = async (userEmail, userName, eventTitle) => {
-    const sent = await sendMail({
-        to: userEmail,
-        subject: `Booking Confirmed: ${eventTitle}`,
-        html: `
-            <h2>Hi ${userName}!</h2>
-            <p>Your booking for the event <strong>${eventTitle}</strong> is successfully confirmed.</p>
-            <p>Thank you for choosing Eventora.</p>
-        `
-    });
-    if (sent) console.log('Booking email sent to', userEmail);
-    return sent;
 };
 
 const sendOTPEmail = async (userEmail, otp, type) => {
@@ -73,12 +94,22 @@ const sendOTPEmail = async (userEmail, otp, type) => {
         `
     });
 
-    if (sent) {
-        console.log(`OTP email sent to ${userEmail} for ${type}`);
-    } else {
-        console.error(`OTP email FAILED for ${userEmail} — check EMAIL_USER/EMAIL_PASS on server`);
+    if (!sent) {
+        console.error(`[OTP-FALLBACK] Could not email ${userEmail}. OTP for ${type}: ${otp}`);
     }
     return sent;
 };
 
-module.exports = { sendBookingEmail, sendOTPEmail, isEmailConfigured };
+const sendBookingEmail = async (userEmail, userName, eventTitle) => {
+    return sendMail({
+        to: userEmail,
+        subject: `Booking Confirmed: ${eventTitle}`,
+        html: `
+            <h2>Hi ${userName}!</h2>
+            <p>Your booking for the event <strong>${eventTitle}</strong> is successfully confirmed.</p>
+            <p>Thank you for choosing Eventora.</p>
+        `
+    });
+};
+
+module.exports = { sendBookingEmail, sendOTPEmail, isEmailConfigured, getEmailProvider };

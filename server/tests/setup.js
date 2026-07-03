@@ -3,8 +3,10 @@ process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
 process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
 
 jest.mock('../utils/email', () => ({
-    sendOTPEmail: jest.fn().mockResolvedValue(undefined),
-    sendBookingEmail: jest.fn().mockResolvedValue(undefined)
+    sendOTPEmail: jest.fn().mockResolvedValue(true),
+    sendBookingEmail: jest.fn().mockResolvedValue(true),
+    isEmailConfigured: jest.fn().mockReturnValue(true),
+    getEmailProvider: jest.fn().mockReturnValue('test')
 }));
 
 jest.mock('../utils/razorpay', () => ({
