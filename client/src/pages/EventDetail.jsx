@@ -2,6 +2,7 @@ import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../utils/axios';
 import { AuthContext } from '../context/AuthContext';
+import { loadRazorpayScript, openRazorpayCheckout } from '../utils/razorpay';
 import { FaCalendarAlt, FaMapMarkerAlt, FaChair, FaMoneyBillWave } from 'react-icons/fa';
 
 const EventDetail = () => {
@@ -45,11 +46,37 @@ const EventDetail = () => {
                 setShowOTP(true);
                 setSuccessMsg('OTP sent to your email. Please verify to confirm booking.');
             } else {
-                await api.post('/bookings', { eventId: event._id, otp });
-                setSuccessMsg('Booking requested! Awaiting admin confirmation.');
+                const { data } = await api.post('/bookings', { eventId: event._id, otp });
                 setShowOTP(false);
-                // Update local seats count dynamically after booking
-                setEvent({ ...event, availableSeats: event.availableSeats - 1 });
+                setOtp('');
+
+                if (data.payment) {
+                    const loaded = await loadRazorpayScript();
+                    if (!loaded) {
+                        setError('Failed to load payment gateway. Please try again.');
+                        return;
+                    }
+
+                    openRazorpayCheckout({
+                        orderId: data.payment.orderId,
+                        amount: data.payment.amount,
+                        currency: data.payment.currency,
+                        keyId: data.payment.keyId,
+                        user,
+                        bookingId: data.booking._id,
+                        onSuccess: async (paymentData) => {
+                            try {
+                                await api.post('/payments/verify', paymentData);
+                                navigate('/payment-success');
+                            } catch (err) {
+                                navigate('/payment-failed');
+                            }
+                        },
+                        onFailure: () => navigate('/payment-failed')
+                    });
+                } else {
+                    setSuccessMsg('Booking requested! Awaiting admin confirmation.');
+                }
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Booking failed');
@@ -153,7 +180,7 @@ const EventDetail = () => {
                                 : 'bg-gray-900 hover:bg-black text-white hover:shadow-xl hover:-translate-y-1'
                                 }`}
                         >
-                            {bookingLoading ? 'Processing...' : (showOTP ? 'Verify OTP & Confirm' : (successMsg && !showOTP ? 'Request Sent' : (isSoldOut ? 'Sold Out' : 'Confirm Registration')))}
+                            {bookingLoading ? 'Processing...' : (showOTP ? (event.ticketPrice > 0 ? 'Verify OTP & Pay' : 'Verify OTP & Confirm') : (successMsg && !showOTP ? 'Request Sent' : (isSoldOut ? 'Sold Out' : (event.ticketPrice > 0 ? 'Book & Pay' : 'Confirm Registration'))))}
                         </button>
                         {error && <p className="text-red-500 mt-4 text-center font-medium bg-red-50 p-2 rounded">{error}</p>}
                         {successMsg && <p className="text-green-600 mt-4 text-center font-medium bg-green-50 p-2 rounded">{successMsg}</p>}

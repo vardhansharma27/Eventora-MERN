@@ -13,10 +13,13 @@ Eventora is a full-stack MERN application that allows users to seamlessly browse
 - **Event Management**: Create free and paid events with detailed descriptions, external image URLs, dates, categories, and seating capacity.
 - **Smart Booking System**:
   - Mandatory 2FA OTP to authorize a booking request.
-  - All booking requests (both free and paid) enter a secure 'Pending' queue for Admin verification.
-  - Seat availability accurately updates and securely validates against overbooking logic.
+  - **Paid events**: Razorpay checkout — payment auto-confirms the booking.
+  - **Free events**: Booking enters a pending queue for admin verification.
+  - Seat availability uses **MongoDB transactions** with atomic seat reservation to prevent double-booking.
+- **Razorpay Payments**: Real payment flow with signature verification and webhook support.
 - **Admin Analytics Dashboard**: Track live data such as Pending Requests, Total Revenue, and Total Confirmed Paid Clients directly from the admin panel.
 - **Email Notifications**: Automated email delivery upon successful booking confirmation using Nodemailer.
+- **QR Entry Tickets**: Confirmed bookings get a signed QR ticket; admins verify at the gate with duplicate-scan detection.
 - **Sleek UI/UX**: Built entirely with React, Tailwind CSS, and polished with micro-interactions.
 
 ---
@@ -35,8 +38,12 @@ JWT_SECRET=supersecretjwtkey_eventora
 EMAIL_USER=your_gmail_address
 EMAIL_PASS=your_gmail_app_password
 PORT=5000
+RAZORPAY_KEY_ID=rzp_test_xxxxxxxx
+RAZORPAY_KEY_SECRET=your_razorpay_secret
+RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 ```
 > **Note**: For `EMAIL_PASS`, you need to generate an "App Password" from your Google Account settings, standard passwords won't work due to 2FA.
+> **Razorpay**: Sign up at [Razorpay Dashboard](https://dashboard.razorpay.com/) → use Test Mode keys. For webhooks (production), add endpoint `https://your-api.com/api/payments/webhook` and subscribe to `payment.captured`.
 
 ### 2. Run from Outer Folder (Single Terminal)
 You can now manage both backend and frontend from the project root:
@@ -81,3 +88,14 @@ cd client
 npm run dev
 ```
 *(Client will run on a local port provided by Vite, typically `http://localhost:5173`)*
+
+### 5. Run Tests
+```bash
+# from Eventora root
+npm test
+
+# or from server folder
+cd server
+npm test
+```
+Tests use an in-memory MongoDB replica set (no external DB required).

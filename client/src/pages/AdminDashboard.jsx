@@ -11,6 +11,9 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState(true);
 
     const [showEventForm, setShowEventForm] = useState(false);
+    const [ticketToken, setTicketToken] = useState('');
+    const [verifyResult, setVerifyResult] = useState(null);
+    const [verifying, setVerifying] = useState(false);
     const [formData, setFormData] = useState({
         title: '', description: '', date: '', location: '', category: '', totalSeats: '', ticketPrice: '', image: ''
     });
@@ -81,6 +84,25 @@ const AdminDashboard = () => {
         }
     };
 
+    const handleVerifyTicket = async (e) => {
+        e.preventDefault();
+        if (!ticketToken.trim()) return;
+        setVerifying(true);
+        setVerifyResult(null);
+        try {
+            const { data } = await api.post('/bookings/verify-ticket', { token: ticketToken.trim() });
+            setVerifyResult(data);
+            fetchData();
+        } catch (error) {
+            setVerifyResult({
+                valid: false,
+                message: error.response?.data?.message || 'Verification failed'
+            });
+        } finally {
+            setVerifying(false);
+        }
+    };
+
     if (loading) return <div className="text-center py-20 text-xl font-semibold">Loading admin panel...</div>;
 
     return (
@@ -121,6 +143,44 @@ const AdminDashboard = () => {
                     </div>
                     <div className="w-12 h-12 bg-yellow-100 text-yellow-600 rounded-full flex items-center justify-center text-xl font-bold">⏳</div>
                 </div>
+            </div>
+
+            {/* Gate check-in */}
+            <div className="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-gray-100 mb-8">
+                <h2 className="text-xl font-bold text-gray-800 mb-2">Gate Check-in</h2>
+                <p className="text-sm text-gray-500 mb-4">Scan a attendee&apos;s QR ticket or paste the ticket token below to verify entry.</p>
+                <form onSubmit={handleVerifyTicket} className="flex flex-col sm:flex-row gap-3">
+                    <input
+                        type="text"
+                        value={ticketToken}
+                        onChange={(e) => setTicketToken(e.target.value)}
+                        placeholder="Paste ticket token from QR scan..."
+                        className="flex-1 border px-4 py-3 rounded-lg focus:ring-2 focus:ring-gray-700 outline-none text-sm font-mono"
+                    />
+                    <button
+                        type="submit"
+                        disabled={verifying || !ticketToken.trim()}
+                        className="bg-gray-900 text-white font-bold py-3 px-6 rounded-lg hover:bg-black transition disabled:opacity-50 shrink-0"
+                    >
+                        {verifying ? 'Verifying...' : 'Verify Ticket'}
+                    </button>
+                </form>
+                {verifyResult && (
+                    <div className={`mt-4 p-4 rounded-xl border ${verifyResult.valid ? (verifyResult.alreadyCheckedIn ? 'bg-yellow-50 border-yellow-200' : 'bg-green-50 border-green-200') : 'bg-red-50 border-red-200'}`}>
+                        <p className={`font-bold ${verifyResult.valid ? (verifyResult.alreadyCheckedIn ? 'text-yellow-800' : 'text-green-800') : 'text-red-800'}`}>
+                            {verifyResult.message}
+                        </p>
+                        {verifyResult.valid && verifyResult.attendee && (
+                            <div className="mt-2 text-sm text-gray-700 space-y-1">
+                                <p><strong>Attendee:</strong> {verifyResult.attendee.name} ({verifyResult.attendee.email})</p>
+                                <p><strong>Event:</strong> {verifyResult.event?.title}</p>
+                                {verifyResult.checkedInAt && (
+                                    <p><strong>Checked in:</strong> {new Date(verifyResult.checkedInAt).toLocaleString()}</p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
 
             {showEventForm && (
@@ -187,7 +247,7 @@ const AdminDashboard = () => {
                                         <div className="flex justify-between items-start mb-3">
                                             <h4 className="font-bold text-gray-900 text-lg leading-tight">{booking.eventId?.title || 'Deleted Event'}</h4>
                                             <div className="flex flex-col gap-1 items-end shrink-0 ml-4">
-                                                <span className={`px-2 py-1 text-[10px] font-black rounded uppercase tracking-wider ${booking.status === 'confirmed' ? 'bg-green-100 text-green-700' : booking.status === 'cancelled' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}`}>{booking.status}</span>
+                                                <span className={`px-2 py-1 text-[10px] font-black rounded uppercase tracking-wider ${booking.status === 'confirmed' ? 'bg-green-100 text-green-700' : booking.status === 'cancelled' ? 'bg-red-100 text-red-700' : booking.status === 'pending_payment' ? 'bg-orange-100 text-orange-700' : 'bg-yellow-100 text-yellow-700'}`}>{booking.status === 'pending_payment' ? 'awaiting payment' : booking.status}</span>
                                                 {booking.status !== 'cancelled' && <span className={`px-2 py-1 text-[10px] font-black rounded uppercase tracking-wider ${booking.paymentStatus === 'paid' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-800'}`}>{booking.paymentStatus.replace('_', ' ')}</span>}
                                             </div>
                                         </div>
@@ -213,7 +273,7 @@ const AdminDashboard = () => {
                                             )}
                                         </div>
 
-                                        {/* Action buttons for admin */}
+                                        {/* Action buttons for admin — only free-event pending bookings */}
                                         {booking.status === 'pending' && (
                                             <div className="flex flex-wrap gap-2 mt-2">
                                                 <button onClick={() => handleConfirmBooking(booking._id, 'paid')} className="flex-1 min-w-[120px] bg-green-50 text-green-700 hover:bg-green-600 hover:text-white border border-green-200 text-xs font-bold py-2.5 px-3 rounded-lg shadow-sm transition">
