@@ -14,9 +14,14 @@ const isEmailConfigured = () => Boolean(getEmailProvider());
 const createTransporter = () => {
     const provider = getEmailProvider();
     if (provider === 'brevo') {
+        const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER;
+        if (!senderEmail) {
+            console.error('Brevo requires BREVO_SENDER_EMAIL — a verified personal email in Brevo (not the @smtp-brevo.com login).');
+            return null;
+        }
         return {
             provider,
-            from: `"Eventora" <${process.env.BREVO_SMTP_USER}>`,
+            from: `"Eventora" <${senderEmail}>`,
             transport: nodemailer.createTransport({
                 host: 'smtp-relay.brevo.com',
                 port: 587,
