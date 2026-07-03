@@ -35,18 +35,19 @@ Navigate to `server/.env` and fill in the necessary keys:
 ```env
 MONGO_URI=your_mongodb_connection_string
 JWT_SECRET=supersecretjwtkey_eventora
-EMAIL_USER=your_gmail_address
-EMAIL_PASS=your_gmail_app_password
+BREVO_API_KEY=your_brevo_api_key
+BREVO_SENDER_EMAIL=your_verified_gmail@gmail.com
 BREVO_SMTP_USER=your_brevo_login_email
 BREVO_SMTP_KEY=your_brevo_smtp_key
-BREVO_SENDER_EMAIL=your_verified_gmail@gmail.com
+EMAIL_USER=your_gmail_address
+EMAIL_PASS=your_gmail_app_password
 PORT=5000
 RAZORPAY_KEY_ID=rzp_test_xxxxxxxx
 RAZORPAY_KEY_SECRET=your_razorpay_secret
 RAZORPAY_WEBHOOK_SECRET=your_webhook_secret
 ```
 > **Note**: For `EMAIL_PASS`, you need to generate an "App Password" from your Google Account settings, standard passwords won't work due to 2FA.
-> **Production (Render)**: Use **Brevo** — set `BREVO_SMTP_USER`, `BREVO_SMTP_KEY`, and **`BREVO_SENDER_EMAIL`** (your Gmail verified in Brevo Senders). Do not use the `@smtp-brevo.com` login as the sender address.
+> **Production (Render)**: Use **Brevo HTTP API** — set `BREVO_API_KEY` and `BREVO_SENDER_EMAIL` (your Gmail verified in Brevo Senders). Render blocks outbound SMTP ports, so SMTP (`BREVO_SMTP_*`) will time out. Create an API key in Brevo → SMTP & API → API keys.
 > **Razorpay**: Sign up at [Razorpay Dashboard](https://dashboard.razorpay.com/) → use Test Mode keys. For webhooks (production), add endpoint `https://your-api.com/api/payments/webhook` and subscribe to `payment.captured`.
 
 ### 2. Run from Outer Folder (Single Terminal)

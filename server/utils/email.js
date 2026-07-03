@@ -3,22 +3,45 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+const getSenderEmail = () =>
+    process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || '';
+
 const getEmailProvider = () => {
-    if (process.env.BREVO_SMTP_KEY && process.env.BREVO_SMTP_USER) return 'brevo';
+    if (process.env.BREVO_API_KEY && getSenderEmail()) return 'brevo-api';
+    if (process.env.BREVO_SMTP_KEY && process.env.BREVO_SMTP_USER && getSenderEmail()) return 'brevo-smtp';
     if (process.env.EMAIL_USER && process.env.EMAIL_PASS) return 'gmail';
     return null;
 };
 
 const isEmailConfigured = () => Boolean(getEmailProvider());
 
-const createTransporter = () => {
-    const provider = getEmailProvider();
-    if (provider === 'brevo') {
-        const senderEmail = process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER;
-        if (!senderEmail) {
-            console.error('Brevo requires BREVO_SENDER_EMAIL — a verified personal email in Brevo (not the @smtp-brevo.com login).');
-            return null;
-        }
+const sendViaBrevoApi = async ({ to, subject, html }) => {
+    const senderEmail = getSenderEmail();
+    const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: {
+            'api-key': process.env.BREVO_API_KEY,
+            'Content-Type': 'application/json',
+            accept: 'application/json'
+        },
+        body: JSON.stringify({
+            sender: { name: 'Eventora', email: senderEmail },
+            to: [{ email: to }],
+            subject,
+            htmlContent: html
+        })
+    });
+
+    if (!response.ok) {
+        const body = await response.text();
+        throw new Error(body || `Brevo API status ${response.status}`);
+    }
+    return true;
+};
+
+const createSmtpTransporter = (provider) => {
+    const senderEmail = getSenderEmail();
+    if (provider === 'brevo-smtp') {
         return {
             provider,
             from: `"Eventora" <${senderEmail}>`,
@@ -37,60 +60,46 @@ const createTransporter = () => {
             })
         };
     }
-    if (provider === 'gmail') {
-        return {
-            provider,
-            from: `"Eventora" <${process.env.EMAIL_USER}>`,
-            transport: nodemailer.createTransport({
-                host: 'smtp.gmail.com',
-                port: 465,
-                secure: true,
-                auth: {
-                    user: process.env.EMAIL_USER,
-                    pass: process.env.EMAIL_PASS
-                },
-                connectionTimeout: 10000,
-                greetingTimeout: 10000,
-                socketTimeout: 15000
-            })
-        };
-    }
-    return null;
+    return {
+        provider: 'gmail',
+        from: `"Eventora" <${process.env.EMAIL_USER}>`,
+        transport: nodemailer.createTransport({
+            host: 'smtp.gmail.com',
+            port: 465,
+            secure: true,
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            },
+            connectionTimeout: 10000,
+            greetingTimeout: 10000,
+            socketTimeout: 15000
+        })
+    };
 };
 
-const sendMail = async (mailOptions) => {
-    const config = createTransporter();
-    if (!config) {
-        console.error('Email not configured. Set BREVO_SMTP_* (production) or EMAIL_USER/PASS (local Gmail).');
+const sendMail = async ({ to, subject, html }) => {
+    const provider = getEmailProvider();
+    if (!provider) {
+        console.error('Email not configured. Set BREVO_API_KEY + BREVO_SENDER_EMAIL (Render) or EMAIL_USER/PASS (local).');
         return false;
     }
+
     try {
-        await config.transport.sendMail({
-            from: config.from,
-            ...mailOptions
-        });
-        console.log(`Email sent via ${config.provider} to ${mailOptions.to}`);
+        if (provider === 'brevo-api') {
+            await sendViaBrevoApi({ to, subject, html });
+            console.log(`Email sent via brevo-api to ${to}`);
+            return true;
+        }
+
+        const config = createSmtpTransporter(provider);
+        await config.transport.sendMail({ from: config.from, to, subject, html });
+        console.log(`Email sent via ${config.provider} to ${to}`);
         return true;
     } catch (error) {
-        console.error(`Email send failed (${config.provider}):`, error.message);
-        if (error.response) console.error('SMTP response:', error.response);
+        console.error(`Email send failed (${provider}):`, error.message);
         return false;
     }
-};
-
-const getEmailStatus = () => {
-    const provider = getEmailProvider();
-    const senderEmail = provider === 'brevo'
-        ? (process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || '')
-        : (process.env.EMAIL_USER || '');
-    return {
-        provider: provider || 'none',
-        configured: Boolean(provider),
-        senderEmail: senderEmail || 'missing',
-        brevoSmtpUserSet: Boolean(process.env.BREVO_SMTP_USER),
-        brevoSmtpKeySet: Boolean(process.env.BREVO_SMTP_KEY),
-        brevoSenderSet: Boolean(process.env.BREVO_SENDER_EMAIL)
-    };
 };
 
 const sendOTPEmail = async (userEmail, otp, type) => {
@@ -132,6 +141,19 @@ const sendBookingEmail = async (userEmail, userName, eventTitle) => {
             <p>Thank you for choosing Eventora.</p>
         `
     });
+};
+
+const getEmailStatus = () => {
+    const provider = getEmailProvider();
+    return {
+        provider: provider || 'none',
+        configured: Boolean(provider),
+        senderEmail: getSenderEmail() || 'missing',
+        brevoApiKeySet: Boolean(process.env.BREVO_API_KEY),
+        brevoSmtpUserSet: Boolean(process.env.BREVO_SMTP_USER),
+        brevoSmtpKeySet: Boolean(process.env.BREVO_SMTP_KEY),
+        brevoSenderSet: Boolean(process.env.BREVO_SENDER_EMAIL)
+    };
 };
 
 module.exports = { sendBookingEmail, sendOTPEmail, isEmailConfigured, getEmailProvider, getEmailStatus };
