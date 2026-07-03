@@ -23,6 +23,7 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem('token', data.token);
             return data;
         } catch (error) {
+            if (error.code === 'ECONNABORTED') throw 'Request timed out. The server may be waking up — try again in a moment.';
             if (error.response?.data?.needsVerification) throw error.response.data;
             throw error.response?.data?.message || 'Login failed';
         }

@@ -29,7 +29,9 @@ exports.register = async (req, res) => {
 
         const otp = generateOTP();
         await OTP.create({ email, otp, action: 'account_verification' });
-        await sendOTPEmail(email, otp, 'account_verification');
+
+        // Respond immediately — don't block on slow/failed SMTP (common on cloud hosts)
+        sendOTPEmail(email, otp, 'account_verification');
 
         res.status(201).json({
             message: 'OTP sent to email. Please verify.',
@@ -53,8 +55,14 @@ exports.login = async (req, res) => {
             const otp = generateOTP();
             await OTP.findOneAndDelete({ email: user.email, action: 'account_verification' });
             await OTP.create({ email: user.email, otp, action: 'account_verification' });
-            await sendOTPEmail(user.email, otp, 'account_verification');
-            return res.status(403).json({ message: 'Account not verified', needsVerification: true, email: user.email });
+
+            sendOTPEmail(user.email, otp, 'account_verification');
+
+            return res.status(403).json({
+                message: 'Account not verified',
+                needsVerification: true,
+                email: user.email
+            });
         }
 
         res.json({

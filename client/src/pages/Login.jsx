@@ -8,6 +8,7 @@ const Login = () => {
     const [otp, setOtp] = useState('');
     const [showOTP, setShowOTP] = useState(false);
     const [error, setError] = useState('');
+    const [info, setInfo] = useState('');
     const [loading, setLoading] = useState(false);
 
     const { login, verifyOTP } = useContext(AuthContext);
@@ -17,6 +18,7 @@ const Login = () => {
         e.preventDefault();
         setLoading(true);
         setError('');
+        setInfo('');
         try {
             if (!showOTP) {
                 const data = await login(email, password);
@@ -30,9 +32,9 @@ const Login = () => {
         } catch (err) {
             if (err.needsVerification) {
                 setShowOTP(true);
-                setError('Account not verified. A new OTP has been sent to your email.');
+                setInfo(`Account not verified. Enter the OTP sent to ${email}. Check spam if you don't see it.`);
             } else {
-                setError(err.message || err);
+                setError(err.message || err || 'Login failed');
             }
         } finally {
             setLoading(false);
@@ -47,6 +49,7 @@ const Login = () => {
             </div>
 
             {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6 text-center shadow-inner border border-red-100">{error}</div>}
+            {info && <div className="bg-blue-50 text-blue-700 p-3 rounded-lg mb-6 text-center shadow-inner border border-blue-100">{info}</div>}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {!showOTP ? (
@@ -73,18 +76,29 @@ const Login = () => {
                         </div>
                     </>
                 ) : (
-                    <div>
-                        <label className="block text-sm font-semibold text-gray-700 mb-2">Verification Code (OTP)</label>
-                        <input
-                            type="text"
-                            required
-                            placeholder="6-digit code"
-                            className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-gray-700 transition shadow-sm font-bold tracking-widest text-center text-lg"
-                            value={otp}
-                            onChange={(e) => setOtp(e.target.value)}
-                            maxLength="6"
-                        />
-                    </div>
+                    <>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
+                            <input
+                                type="email"
+                                readOnly
+                                className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 shadow-sm"
+                                value={email}
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">Verification Code (OTP)</label>
+                            <input
+                                type="text"
+                                required
+                                placeholder="6-digit code"
+                                className="w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-gray-700 transition shadow-sm font-bold tracking-widest text-center text-lg"
+                                value={otp}
+                                onChange={(e) => setOtp(e.target.value)}
+                                maxLength="6"
+                            />
+                        </div>
+                    </>
                 )}
                 <button
                     type="submit"
