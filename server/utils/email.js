@@ -26,13 +26,14 @@ const createTransporter = () => {
                 host: 'smtp-relay.brevo.com',
                 port: 587,
                 secure: false,
+                requireTLS: true,
                 auth: {
                     user: process.env.BREVO_SMTP_USER,
                     pass: process.env.BREVO_SMTP_KEY
                 },
-                connectionTimeout: 10000,
-                greetingTimeout: 10000,
-                socketTimeout: 15000
+                connectionTimeout: 15000,
+                greetingTimeout: 15000,
+                socketTimeout: 20000
             })
         };
     }
@@ -72,8 +73,24 @@ const sendMail = async (mailOptions) => {
         return true;
     } catch (error) {
         console.error(`Email send failed (${config.provider}):`, error.message);
+        if (error.response) console.error('SMTP response:', error.response);
         return false;
     }
+};
+
+const getEmailStatus = () => {
+    const provider = getEmailProvider();
+    const senderEmail = provider === 'brevo'
+        ? (process.env.BREVO_SENDER_EMAIL || process.env.EMAIL_USER || '')
+        : (process.env.EMAIL_USER || '');
+    return {
+        provider: provider || 'none',
+        configured: Boolean(provider),
+        senderEmail: senderEmail || 'missing',
+        brevoSmtpUserSet: Boolean(process.env.BREVO_SMTP_USER),
+        brevoSmtpKeySet: Boolean(process.env.BREVO_SMTP_KEY),
+        brevoSenderSet: Boolean(process.env.BREVO_SENDER_EMAIL)
+    };
 };
 
 const sendOTPEmail = async (userEmail, otp, type) => {
@@ -117,4 +134,4 @@ const sendBookingEmail = async (userEmail, userName, eventTitle) => {
     });
 };
 
-module.exports = { sendBookingEmail, sendOTPEmail, isEmailConfigured, getEmailProvider };
+module.exports = { sendBookingEmail, sendOTPEmail, isEmailConfigured, getEmailProvider, getEmailStatus };

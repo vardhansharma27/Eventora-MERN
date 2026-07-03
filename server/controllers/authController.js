@@ -2,7 +2,7 @@ const User = require('../models/User');
 const OTP = require('../models/OTP');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { sendOTPEmail } = require('../utils/email');
+const { sendOTPEmail, getEmailStatus } = require('../utils/email');
 
 const generateOTP = () => Math.floor(100000 + Math.random() * 900000).toString();
 
@@ -126,4 +126,8 @@ exports.resendOTP = async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: 'Server Error', error: error.message });
     }
+};
+
+exports.emailStatus = (req, res) => {
+    res.json(getEmailStatus());
 };

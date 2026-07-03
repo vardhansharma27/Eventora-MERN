@@ -1,6 +1,7 @@
 import React, { useState, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import { useNavigate, Link } from 'react-router-dom';
+import api from '../utils/axios';
 
 const Login = () => {
     const [email, setEmail] = useState('');
@@ -9,16 +10,37 @@ const Login = () => {
     const [showOTP, setShowOTP] = useState(false);
     const [error, setError] = useState('');
     const [info, setInfo] = useState('');
+    const [warning, setWarning] = useState('');
     const [loading, setLoading] = useState(false);
+    const [resending, setResending] = useState(false);
 
     const { login, verifyOTP } = useContext(AuthContext);
     const navigate = useNavigate();
+
+    const handleResendOTP = async () => {
+        setResending(true);
+        setError('');
+        try {
+            const { data } = await api.post('/auth/resend-otp', { email });
+            if (data.emailSent) {
+                setInfo(`A new OTP was sent to ${email}. Check spam too.`);
+                setWarning('');
+            } else {
+                setWarning('Email could not be sent. On Render, set BREVO_SMTP_USER and BREVO_SMTP_KEY.');
+            }
+        } catch (err) {
+            setError(err.response?.data?.message || 'Could not resend OTP');
+        } finally {
+            setResending(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setLoading(true);
         setError('');
         setInfo('');
+        setWarning('');
         try {
             if (!showOTP) {
                 const data = await login(email, password);
@@ -32,9 +54,13 @@ const Login = () => {
         } catch (err) {
             if (err.needsVerification) {
                 setShowOTP(true);
-                setInfo(`Account not verified. Enter the OTP sent to ${email}. Check spam if you don't see it.`);
+                if (err.emailSent === false) {
+                    setWarning(`We could not email an OTP to ${email}. Add Brevo keys on Render, or set isVerified: true in MongoDB Atlas.`);
+                } else {
+                    setInfo(`Enter the OTP sent to ${email}. Check spam if needed.`);
+                }
             } else {
-                setError(err.message || err || 'Login failed');
+                setError(typeof err === 'string' ? err : (err.message || 'Login failed'));
             }
         } finally {
             setLoading(false);
@@ -48,8 +74,9 @@ const Login = () => {
                 <p className="text-gray-500">Sign in to your Eventora account</p>
             </div>
 
-            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-6 text-center shadow-inner border border-red-100">{error}</div>}
-            {info && <div className="bg-blue-50 text-blue-700 p-3 rounded-lg mb-6 text-center shadow-inner border border-blue-100">{info}</div>}
+            {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-center border border-red-100">{error}</div>}
+            {warning && <div className="bg-amber-50 text-amber-800 p-3 rounded-lg mb-4 text-center border border-amber-200 text-sm">{warning}</div>}
+            {info && <div className="bg-blue-50 text-blue-700 p-3 rounded-lg mb-4 text-center border border-blue-100 text-sm">{info}</div>}
 
             <form onSubmit={handleSubmit} className="space-y-6">
                 {!showOTP ? (
@@ -79,12 +106,7 @@ const Login = () => {
                     <>
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Email Address</label>
-                            <input
-                                type="email"
-                                readOnly
-                                className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 shadow-sm"
-                                value={email}
-                            />
+                            <input type="email" readOnly className="w-full px-4 py-3 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 shadow-sm" value={email} />
                         </div>
                         <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">Verification Code (OTP)</label>
@@ -98,6 +120,14 @@ const Login = () => {
                                 maxLength="6"
                             />
                         </div>
+                        <button
+                            type="button"
+                            onClick={handleResendOTP}
+                            disabled={resending}
+                            className="w-full text-sm font-semibold text-gray-700 hover:text-gray-900 underline"
+                        >
+                            {resending ? 'Sending...' : 'Resend OTP'}
+                        </button>
                     </>
                 )}
                 <button
